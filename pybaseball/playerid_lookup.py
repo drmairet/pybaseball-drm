@@ -154,7 +154,8 @@ class _PlayerSearchClient:
         results = pd.DataFrame()
 
         for last, first in player_list:
-            results = results.append(self.search(last, first), ignore_index=True)
+            #results = results.append(self.search(last, first), ignore_index=True)
+            results = results.concat(results, self.search(last, first), ignore_index=True)
         
         return results
 
