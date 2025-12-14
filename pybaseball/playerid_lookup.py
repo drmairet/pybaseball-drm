@@ -1,5 +1,6 @@
 from difflib import get_close_matches
 import io
+import logging
 import os
 import re
 import zipfile
@@ -11,6 +12,9 @@ import requests
 
 from . import cache
 import unicodedata
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 url = "https://github.com/chadwickbureau/register/archive/refs/heads/master.zip"
 PEOPLE_FILE_PATTERN = re.compile("/people.+csv$")
@@ -114,6 +118,7 @@ class _PlayerSearchClient:
         Returns:
             pd.DataFrame: DataFrame of playerIDs, name, years played
         """
+        logger.debug(f"Searching for player: last='{last}', first='{first}', fuzzy={fuzzy}, ignore_accents={ignore_accents}")
 
         # force input strings to lowercase
         last = last.lower()
@@ -132,9 +137,11 @@ class _PlayerSearchClient:
             results = self.table.loc[(self.table['name_last'] == last) & (self.table['name_first'] == first)]
 
         results = results.reset_index(drop=True)
+        logger.debug(f"Found {len(results)} exact match(es) for '{last}' {first if first else ''}")
 
         # If no matches, return 5 closest names
         if len(results) == 0 and fuzzy:
+            logger.info("No identically matched names found! Returning the 5 most similar names.")
             print("No identically matched names found! Returning the 5 most similar names.")
             results=get_closest_names(last=last, first=first, player_table=self.table)
             
@@ -151,14 +158,19 @@ class _PlayerSearchClient:
         Returns:
             pd.DataFrame: DataFrame of playerIDs, name, years played
         ''' 
-        results = pd.DataFrame()
-
-        for last, first in player_list:
-
-            results = pd.concat([results, self.search(last, first)], ignore_index=True)
+        logger.info(f"Starting search_list for {len(player_list)} player(s)")
+        result_list = []
+        
+        for idx, (last, first) in enumerate(player_list, 1):
+            logger.debug(f"[{idx}/{len(player_list)}] Searching for '{last}, {first}'")
+            result = self.search(last, first)
+            logger.debug(f"[{idx}/{len(player_list)}] Found {len(result)} result(s)")
+            result_list.append(result)
+        
+        results = pd.concat(result_list, ignore_index=True) if result_list else pd.DataFrame()
+        logger.info(f"search_list completed. Total results: {len(results)}")
         
         return results
-
 
     def reverse_lookup(self, player_ids: List[str], key_type: str = 'mlbam') -> pd.DataFrame:
         """Retrieve a table of player information given a list of player ids
